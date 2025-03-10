@@ -4,14 +4,12 @@
   "version": "1.0",
   "description": "Record audio from current tab",
   "permissions": [
+    "sidePanel",
     "tabCapture",
     "activeTab",
     "storage"
   ],
-  "action": {
-    "default_popup": "popup.html"
-  },
-  "background": {
-    "service_worker": "background.js"
+  "side_panel": {
+    "default_path": "popup.html"
   }
 } 
