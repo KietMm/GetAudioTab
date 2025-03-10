@@ -4,6 +4,39 @@ let audioContext;
 let audioSource;
 let analyser;
 
+// Thêm các utility functions ở đầu file
+const convertBuffer = {
+  float32ToInt16: (arrBuffer) => {
+    let dataInt16 = new Int16Array(arrBuffer.length);
+    for (let i = 0; i < arrBuffer.length; i++) {
+      dataInt16[i] = Math.max(-32768, Math.min(32767, arrBuffer[i] * 32768));
+    }
+    return dataInt16;
+  },
+  combineMetadata: (arrBuffer, rate) => {
+    const metadata = JSON.stringify({ sampleRate: rate });
+    const metadataBytes = new TextEncoder().encode(metadata);
+    const metadataLength = new ArrayBuffer(4);
+    new DataView(metadataLength).setInt32(0, metadataBytes.byteLength, true);
+    const combinedData = new Blob([
+      metadataLength,
+      metadataBytes,
+      arrBuffer.buffer,
+    ]);
+    return combinedData;
+  }
+};
+
+// Thêm hàm tạo WebSocket connection
+const createWebSocket = (url) => {
+  const ws = new WebSocket(url);
+  ws.binaryType = 'arraybuffer';
+  ws.onopen = () => console.log('WebSocket connected');
+  ws.onclose = () => console.log('WebSocket closed');
+  ws.onerror = (err) => console.error('WebSocket error:', err);
+  return ws;
+};
+
 document.getElementById('startRecord').addEventListener('click', async () => {
   const startButton = document.getElementById('startRecord');
   const stopButton = document.getElementById('stopRecord');
@@ -22,9 +55,29 @@ document.getElementById('startRecord').addEventListener('click', async () => {
       });
     });
     
-    // Thêm xử lý audio realtime
+    // Khởi tạo WebSocket connection
+    const ws = createWebSocket('ws://172.29.209.232:8768');
+    
+    // Thiết lập audio processing
     audioContext = new AudioContext();
     audioSource = audioContext.createMediaStreamSource(stream);
+    
+    // Tạo script processor để xử lý audio data
+    const processor = audioContext.createScriptProcessor(256, 1, 1);
+    audioSource.connect(processor);
+    processor.connect(audioContext.destination);
+    
+    processor.onaudioprocess = function(e) {
+      if (ws.readyState === WebSocket.OPEN) {
+        const inputData = e.inputBuffer.getChannelData(0);
+        ws.send(
+          convertBuffer.combineMetadata(
+            convertBuffer.float32ToInt16(inputData),
+            audioContext.sampleRate
+          )
+        );
+      }
+    };
     
     // Tạo analyser node để đọc dữ liệu âm thanh
     analyser = audioContext.createAnalyser();
